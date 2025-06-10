@@ -5,11 +5,15 @@
 ## Version: 1.1
 ## SavedVariables: NetherbotDB
 
-locale.lua
+Libs\Ace3\Ace3.toc
+Libs\Ace3\AceLocale-3.0\AceLocale-3.0.lua
+locale\enUS.lua
+locale\frFR.lua
+
 locale\zhCN.lua
 locale\zhTW.lua
 locale\itIT.lua
 locale\grGR.lua
-locale\frFR.lua
+
 
 netherbot.lua

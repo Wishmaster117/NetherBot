@@ -1,0 +1,51 @@
+-- chargé AVANT netherbot.lua
+local L = LibStub("AceLocale-3.0"):NewLocale("NetherBot", "enUS", true)
+if not L then return end    -- devient la locale par défaut
+
+L["NetherBot"]           = "NetherBot"
+L["Hide"]                = "Hide"
+L["NetherBot_title"]     = "NetherBot – NPC BOT Tool"
+L["Follow"]              = "Follow"
+L["Stand"]               = "Stand"
+L["Stop"]                = "Stop"
+L["Slack"]               = "Slack"
+L["UnHide"]              = "UnHide"
+L["Recall"]              = "Recall"
+L["Unbind"]              = "Unbind"
+L["Spawn"]               = "Spawn"
+L["Spawn Bot"]           = "Spawn Bot"
+L["Revive"]              = "Revive"
+L["Admin"]               = "Admin"
+L["Entry ID"]            = "Entry ID"
+L["Enter NPCBOT ID:"]    = "Enter NPCBOT ID:"
+L["Revive Bots"]         = "Revive Bots"
+L["Select class"]        = "Select class"
+L["Spawn BOT ID:"]       = "Spawn BOT ID:"
+L["Lookup"] = true
+-- ### Missing entries for English ###
+L["NetherBot"]    = true
+L["Add"]          = true
+L["Remove"]       = true
+L["Bot-Info"]     = true
+L["Move"]         = true
+L["Delete"]       = true
+L["Rogue"]        = true
+L["Spellbreaker"] = true
+L["Archmage"]     = true
+L["Dreadlord"]    = true
+L["Warrior"] = true
+L["Paladin"] = true
+L["Hunter"] = true
+L["Rogue"] = true
+L["Priest"] = true
+L["Death Knight"] = true
+L["Shaman"] = true 
+L["Mage"] = true 
+L["Warlock"] = true
+L["Druid"] = true
+L["Blademaster"] = true
+L["Sphynx"]= true
+L["DarkRanger"] = true
+L["Necromancer"] = true 
+L["SeaWitch"] = true
+L["Revive Bots"] = true
