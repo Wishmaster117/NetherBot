@@ -6,6 +6,7 @@ local AceConsole = LibStub("AceConsole-3.0")
 local AceEvent   = LibStub("AceEvent-3.0")
 local AceGUI     = LibStub("AceGUI-3.0")
 local AceLocale = LibStub("AceLocale-3.0")
+local GUI = LibStub("AceGUI-3.0")
 
 
 -- 1) CRÉATION DE L’ADDON (doit venir en tout début)
@@ -17,17 +18,269 @@ local function i18n(key)
   return (L and L[key]) or key
 end
 
--- NetherBot.i18n = i18n               -- (optionnel) pour l’utiliser ailleurs
-
 -- 2) Plus bas, une fois l’addon créé, récupérez les libs :
 local LDB     = LibStub("LibDataBroker-1.1", true)
 local LDBIcon = LibStub("LibDBIcon-1.0",       true)
 
--- vérifiez qu’elles sont disponibles
---if not LDB or not LDBIcon then
---  print("Librairie KO")
---  return
---end
+--------------------------------------------------------------------
+--  Patch Module création de Bots
+--------------------------------------------------------------------
+
+--------------------------------------------------------------------
+-- 1. Table NB_DATA
+--------------------------------------------------------------------
+local NB_DATA = _G.NB_DATA or error("[NetherBot] NB_DATA manquant (data/data.lua non chargé ?)")
+
+local function buildList(src)
+  local t = {}
+  for k, v in pairs(src) do t[k] = v end
+  return t
+end
+
+--------------------------------------------------------------------
+-- 2. getLabel : déclaré AVANT la frame
+--------------------------------------------------------------------
+local function getLabel(cat, race, idx)
+  local tbl = NB_DATA.Labels[cat] and NB_DATA.Labels[cat][race]
+  if tbl and tbl[idx] then return tbl[idx] end
+  return "#" .. tostring(idx)
+end
+
+-- Création / MAJ dynamique des listes visuelles ------------------
+local function updateVisualDropdowns(race, gender, ddSkin, ddFace, ddHair, ddHairCol, ddFeat)
+  if not (race and gender) then return end
+  ddSkin:SetList(NB_DATA:BuildRangeList(race, gender, "skin"))
+  ddFace:SetList(NB_DATA:BuildRangeList(race, gender, "face"))
+  ddHair:SetList(NB_DATA:BuildRangeList(race, gender, "hair"))
+  ddHairCol:SetList(NB_DATA:BuildRangeList(race, gender, "haircolor"))
+  ddFeat:SetList(NB_DATA:BuildRangeList(race, gender, "features"))
+end
+
+
+--------------------------------------------------------------------
+-- 3. Fenêtre
+--------------------------------------------------------------------
+function NetherBot:ShowCreateBotFrame()
+  if self.createBotFrame and self.createBotFrame:IsShown() then return end
+  local AceGUI = LibStub("AceGUI-3.0")
+  local f = AceGUI:Create("Frame")
+  f:SetTitle(i18n("BOT_CREATE_TITLE"))
+  f:SetLayout("Flow")
+  f:SetWidth(380)
+  f:SetHeight(480)
+  self.createBotFrame = f
+
+----------------------------------------------------------------
+-- Tooltips
+----------------------------------------------------------------
+local function addTooltip(widget, text)
+  -- cible réelle : editbox si présent, sinon frame du widget
+  local target = widget.editbox or widget.frame
+  target:EnableMouse(true)                     -- indispensable pour EditBox
+  target:SetScript("OnEnter", function(self)
+      GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+      GameTooltip:AddLine(text, 1, 1, 1, true)
+      GameTooltip:Show()
+  end)
+  target:SetScript("OnLeave", GameTooltip_Hide)
+end
+
+  ----------------------------------------------------------------
+  -- Widgets principaux
+  ----------------------------------------------------------------
+  local nameBox = AceGUI:Create("EditBox"); nameBox:SetLabel(i18n("BOT_NAME")); nameBox:SetFullWidth(true); addTooltip(nameBox, i18n("BOT_NAME_TOOLTIP")); nameBox.button:Hide(); f:AddChild(nameBox)
+
+  local ddClass = AceGUI:Create("Dropdown"); ddClass:SetLabel(i18n("BOT_CLASS")); ddClass:SetList(buildList(NB_DATA.Classes)); ddClass:SetWidth(200); f:AddChild(ddClass)
+  local ddRace  = AceGUI:Create("Dropdown"); ddRace:SetLabel(i18n("BOT_RACE")); ddRace:SetList(buildList(NB_DATA.Races));  ddRace:SetWidth(200); f:AddChild(ddRace)
+  local ddGender= AceGUI:Create("Dropdown"); ddGender:SetLabel(i18n("BOT_GENDER"));       ddGender:SetList(buildList(NB_DATA.Genders)); ddGender:SetWidth(100); f:AddChild(ddGender)
+
+  local ddSkin  = AceGUI:Create("Dropdown"); ddSkin:SetLabel(i18n("BOT_SKIN"));          ddSkin:SetWidth(90); f:AddChild(ddSkin)
+  local ddFace  = AceGUI:Create("Dropdown"); ddFace:SetLabel(i18n("BOT_FACE"));        ddFace:SetWidth(90); f:AddChild(ddFace)
+  local ddHair  = AceGUI:Create("Dropdown"); ddHair:SetLabel(i18n("BOT_HAIRSTYLE"));       ddHair:SetWidth(110); f:AddChild(ddHair)
+  local ddHairC = AceGUI:Create("Dropdown"); ddHairC:SetLabel(i18n("BOT_HAIRCOLOR"));      ddHairC:SetWidth(110); f:AddChild(ddHairC)
+  local ddFeat = AceGUI:Create("Dropdown"); ddFeat:SetLabel(i18n("BOT_FEATURES"));       ddFeat:SetWidth(90); addTooltip(ddFeat, i18n("BOT_FEATURES_TOOLTIP")); f:AddChild(ddFeat)
+  local ddSS    = AceGUI:Create("Dropdown"); ddSS:SetLabel(i18n("BOT_SOUNDSET"));       ddSS:SetList(buildList(NB_DATA.Soundset)); ddSS:SetWidth(90); f:AddChild(ddSS)
+
+----------------------------------------------------------------
+-- Résumé dynamique
+----------------------------------------------------------------
+local summary = AceGUI:Create("Label")
+summary:SetFullWidth(true)
+summary:SetFontObject(GameFontHighlight)   -- objet, plus d’erreur
+summary:SetText(" ")                      -- une ligne vide pour réserver la place
+f:AddChild(summary)
+
+  ----------------------------------------------------------------
+  -- Ranges
+  ----------------------------------------------------------------
+local function fillRanges()
+  local r,g = ddRace:GetValue(), ddGender:GetValue()
+  if not (r and g) then return end
+  ddSkin:SetList(NB_DATA:BuildRangeList(r,g,"skin"))
+  ddFace:SetList(NB_DATA:BuildRangeList(r,g,"face"))
+  ddHair:SetList(NB_DATA:BuildRangeList(r,g,"hair"))
+  ddHairC:SetList(NB_DATA:BuildRangeList(r,g,"haircolor"))
+  ddFeat:SetList(NB_DATA:BuildRangeList(r,g,"features"))
+end
+
+  ----------------------------------------------------------------
+  -- Résumé
+  ----------------------------------------------------------------
+local function refreshSummary()
+  local race   = ddRace  :GetValue() or -1
+  local gender = ddGender:GetValue() or -1
+  local nom    = nameBox:GetText():gsub("^%s+",""):gsub("%s+$","")
+  if nom == "" then nom = "-" end
+
+  -- récupère chaque étiquette traduite
+  local H  = i18n("SUMMARY_HEADER")
+  local Nl = i18n("SUMMARY_NAME_LABEL")
+  local Cl = i18n("SUMMARY_CLASS_LABEL")
+  local Rl = i18n("SUMMARY_RACE_LABEL")
+  local Gl = i18n("SUMMARY_GENDER_LABEL")
+  local Sl = i18n("SUMMARY_SKIN_LABEL")
+  local Fl = i18n("SUMMARY_FACE_LABEL")
+  local Hl = i18n("SUMMARY_HAIR_LABEL")
+  local Col= i18n("SUMMARY_COLOR_LABEL")
+  local Fe = i18n("SUMMARY_FEAT_LABEL")
+  local Ss = i18n("SUMMARY_SS_LABEL")
+
+  -- construit le texte avec %s
+  local fmt = table.concat({
+    H,
+    string.format("|cffffd200%s :|r %s", Nl, nom),
+    string.format("|cffffd200%s :|r %s", Cl, NB_DATA.Classes[ddClass:GetValue()] or "-"),
+    string.format("|cffffd200%s :|r %s", Rl, NB_DATA.Races[race] or "-"),
+    string.format("|cffffd200%s :|r %s", Gl, NB_DATA.Genders[gender] or "-"),
+    string.format("|cffffd200%s :|r %s", Sl, getLabel("Skin", race, tonumber(ddSkin:GetValue()))),
+    string.format("|cffffd200%s :|r %s", Fl, getLabel("Face", race, tonumber(ddFace:GetValue()))),
+    string.format("|cffffd200%s :|r %s", Hl, getLabel("HairStyle", race, tonumber(ddHair:GetValue()))),
+    string.format("|cffffd200%s :|r %s", Col, getLabel("HairColor", race, tonumber(ddHairC:GetValue()))),
+    string.format("|cffffd200%s :|r %s", Fe, getLabel("Features", race, tonumber(ddFeat:GetValue()))),
+    string.format("|cffffd200%s :|r %s", Ss, NB_DATA.Soundset[ddSS:GetValue()] or "-"),
+  }, "\n")
+
+  summary:SetText(fmt)
+end
+
+  ----------------------------------------------------------------
+  -- Callbacks centralisés
+  ----------------------------------------------------------------
+local function changed()
+  fillRanges()
+  refreshSummary()
+end
+for _,dd in ipairs{ddRace, ddGender, ddSkin, ddFace, ddHair, ddHairC, ddFeat, ddClass, ddSS} do
+  dd:SetCallback("OnValueChanged", changed)
+end
+
+nameBox:SetCallback("OnTextChanged", changed)  -- pour mettre à jour le Nom
+changed()  -- affichage initial
+----------------------------------------------------------------
+
+  -- Callbacks pour MAJ des ranges -------------------------------
+  -- local function refreshRanges() updateVisualDropdowns(ddRace:GetValue(), ddGender:GetValue(), ddSkin, ddFace, ddHair, ddHairC, ddFeat) end
+  -- ddRace:SetCallback("OnValueChanged", refreshRanges)
+  -- ddGender:SetCallback("OnValueChanged", refreshRanges)
+
+  ----------------------------------------------------------------
+  -- Bouton Créer
+  ----------------------------------------------------------------
+  -- local btnCreate = AceGUI:Create("Button"); btnCreate:SetText(i18n("BOT_CREATE8BUTTON")); btnCreate:SetWidth(120)
+  -- btnCreate:SetCallback("OnClick", function()
+  --   local name = (nameBox:GetText() or ""):gsub("%s+","_")
+  --   local class,race,gender = ddClass:GetValue(), ddRace:GetValue(), ddGender:GetValue()
+  --   local skin,face,hair,hc,feat,ss = ddSkin:GetValue(), ddFace:GetValue(), ddHair:GetValue(), ddHairC:GetValue(), ddFeat:GetValue(), ddSS:GetValue()
+  --   if name=="" or not (class and race and gender and skin and face and hair and hc and feat and ss) then
+  --     print("|cffff0000[NetherBot]|r Remplissez tous les champs."); return
+  --   end
+  --   local cmd = string.format(".npcbot createnew %s %d %d %d %d %d %d %d %d %d", name, class, race, gender, skin, face, hair, hc, feat, ss)
+  --   -- SendChatMessage(cmd, "SAY")
+	 --print("Commande envoyée : " ..cmd)
+  --   f:Hide()
+  -- end)
+  local btnCreate = AceGUI:Create("Button"); btnCreate:SetText(i18n("BOT_CREATE8BUTTON"))
+  btnCreate:SetWidth(120)
+btnCreate:SetCallback("OnClick", function()
+  ----------------------------------------------------------------
+  -- 1. Lecture brute du nom
+  ----------------------------------------------------------------
+  local rawName = nameBox:GetText() or ""
+
+  -- 1.a Majuscule
+  local first = rawName:sub(1,1)
+  if not first:match("%u") then
+    print(i18n("NAME_CAPS"))
+    return
+  end
+
+  -- 1.b Pas d’espaces autorisés
+  if rawName:find("%s") then
+    print(i18n("NAME_UNDERSCORE"))
+    return
+  end
+
+  ----------------------------------------------------------------
+  -- 2. Normalisation : trim & underscores (pour safety)
+  ----------------------------------------------------------------
+  local name = rawName:gsub("^_+", ""):gsub("_+$", "")  -- enlève underscores adventices
+  name = name:gsub("%s+", "_")                         -- encore, au cas où
+  -- (mais normalement le rawName n’a plus d’espace)
+
+  ----------------------------------------------------------------
+  -- 3. Récupération des dropdowns
+  ----------------------------------------------------------------
+  local class  = ddClass :GetValue()
+  local race   = ddRace  :GetValue()
+  local gender = ddGender:GetValue()
+  local skin   = ddSkin  :GetValue()
+  local face   = ddFace  :GetValue()
+  local hair   = ddHair  :GetValue()
+  local color  = ddHairC :GetValue()
+  local feat   = ddFeat  :GetValue()
+  local ss     = ddSS    :GetValue()
+
+  -- print("DEBUG values:", "name="..tostring(name), "class",class,"race",race,"gender",gender,"skin",skin,"face",face,"hair",hair,"color",color,"feat",feat,"ss",ss)
+
+  ----------------------------------------------------------------
+  -- 4. Vérification finale
+  ----------------------------------------------------------------
+  local missing = {}
+  if name == ""                 then table.insert(missing,"Nom")     end
+  if not class                  then table.insert(missing,"Classe")  end
+  if not race                   then table.insert(missing,"Race")    end
+  if not gender                 then table.insert(missing,"Genre")   end
+  if not skin                   then table.insert(missing,"Peau")    end
+  if not face                   then table.insert(missing,"Visage")  end
+  if not hair                   then table.insert(missing,"Cheveux") end
+  if not color                  then table.insert(missing,"Couleur") end
+  if not feat                   then table.insert(missing,"Ornements") end
+  if not ss                     then table.insert(missing,"Voix")    end
+
+  if #missing > 0 then
+    local msg = i18n("ERROR_MISSING_FIELDS"):format(table.concat(missing, ", "))
+	print("|cffff0000[NetherBot]|r " .. msg)
+    return
+  end
+
+  ----------------------------------------------------------------
+  -- 5. Envoi de la commande
+  ----------------------------------------------------------------
+  local cmd = string.format(".npcbot createnew %s %d %d %d %d %d %d %d %d %d",
+      name, class, race, gender, skin, face, hair, color, feat, ss)
+
+  print("|cff55ff55Commande envoyée :|r", cmd)
+  -- SendChatMessage(cmd, "SAY")
+  f:Hide()
+end)
+
+  f:AddChild(btnCreate)
+
+end
+
+--------------------------------------------------------------------
+--  FIN Patch Module création de Bots
+--------------------------------------------------------------------
 
 -- Foncfions pour delete un bot
 StaticPopupDialogs["NB_DEL_CONFIRM"] = {
@@ -484,7 +737,10 @@ local bInfo     = makeAdminBtn("NB_Info"    , "Bot-Info", 160, -35 , 70, i18n("I
 local bMove     = makeAdminBtn("NB_Move"    , "Move"    , 85 , -62 , 70, i18n("Move_tooltip"))
 local bDelete   = makeAdminBtn("NB_Delete"  , "Delete"  , 160, -62 , 70, i18n("Delete_tooltip"))
 -- bouton “Delete Free” (supprime tous les bots libres)
-local bDeleteFree = makeAdminBtn("NB_DeleteFree", "Delete Free", 10, -89, 120, i18n("DeleteFree_tooltip"))
+local bDeleteFree = makeAdminBtn("NB_DeleteFree", "Delete Free", 10, -89, 155, i18n("DeleteFree_tooltip"))-- 4. Add a button on the admin panel (after existing makeAdminBtn calls)
+-- 4. Add a button on the admin panel (after existing makeAdminBtn calls)
+local bCreateBot = makeAdminBtn("NB_CreateBot", "CREATE_BOT", 170, -89, 90, i18n("CREATE_BOT_TOOLTIP"))
+bCreateBot:SetScript("OnClick", function() NetherBot:ShowCreateBotFrame() end)
 
 --  142,              -- x = 142px à droite du coin top-left de adminFrame
 --  -62,              -- y = 62px vers le bas du coin top-left de adminFrame
